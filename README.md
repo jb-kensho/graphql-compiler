@@ -1,7 +1,12 @@
 # graphql-compiler
 
+
 [![Build Status](https://travis-ci.org/kensho-technologies/graphql-compiler.svg?branch=master)](https://travis-ci.org/kensho-technologies/graphql-compiler)
-[![Coverage Status](https://coveralls.io/repos/github/kensho-technologies/graphql-compiler/badge.svg?branch=master)](https://coveralls.io/github/kensho-technologies/graphql-compiler?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/jb-kensho/graphql-compiler/badge.svg)](https://coveralls.io/github/jb-kensho/graphql-compiler)
+
+[//]: # ([![Coverage Status](https://coveralls.io/repos/github/kensho-technologies/graphql-compiler/badge.svg?branch=master)](https://coveralls.io/github/kensho-technologies/graphql-compiler?branch=master))
+
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![PyPI Python](https://img.shields.io/pypi/pyversions/graphql-compiler.svg)](https://pypi.python.org/pypi/graphql-compiler)
 [![PyPI Version](https://img.shields.io/pypi/v/graphql-compiler.svg)](https://pypi.python.org/pypi/graphql-compiler)
@@ -14,25 +19,17 @@ Turn complex GraphQL queries into optimized database queries.
 pip install graphql-compiler
 ```
 
-## Quick Overview 
-
-Through the GraphQL compiler, users can write powerful queries that uncover 
-deep relationships in the data while not having to worry about the underlying database query 
-language. The GraphQL compiler turns read-only queries written in GraphQL syntax to different 
-query languages. 
-
-Furthermore, the GraphQL compiler validates queries through the use of a GraphQL schema 
-that specifies the underlying schema of the database. We can currently autogenerate a 
-GraphQL schema by introspecting an OrientDB database, (see [Querying OrientDB with GraphQL](#querying-orientdb-with-graphql)). 
-
-In the near future, we plan to add schema autogeneration from SQLAlchemy metadata as well. 
-
 For a more detailed overview and getting started guide, please see
 [our blog post](https://blog.kensho.com/compiled-graphql-as-a-database-query-language-72e106844282).
 
+To pretty-print GraphQL queries, use the included pretty-printer:
+```
+python -m graphql_compiler.tool <input_file.graphql >output_file.graphql
+```
+It's modeled after Python's `json.tool`, reading from stdin and writing to stdout.
+
 ## Table of contents
-  * [Features](#features)
-  * [Querying OrientDB with GraphQL](#querying-orientdb-with-graphql)
+  * [FAQ](#faq)
   * [Definitions](#definitions)
   * [Directives](#directives)
      * [@optional](#optional)
@@ -62,77 +59,72 @@ For a more detailed overview and getting started guide, please see
      * [End-To-End SQL Example](#end-to-end-sql-example)
      * [Configuring the SQL Database to Match the GraphQL Schema](#configuring-the-sql-database-to-match-the-graphql-schema)
   * [Miscellaneous](#miscellaneous)
-     * [Pretty-Printing GraphQL Queries](#pretty-printing-graphql-queries)
      * [Expanding `@optional` vertex fields](#expanding-optional-vertex-fields)
      * [Optional `type_equivalence_hints` compilation parameter](#optional-type_equivalence_hints-parameter)
-  * [FAQ](#faq)
   * [License](#license)
 
-## Features
-* **Databases and Query Languages:** We currently support a single database, OrientDB version 2.2.28+, and two query languages that OrientDB supports: the OrientDB dialect of gremlin, and OrientDB's own custom SQL-like query language that we refer to as MATCH, after the name of its graph traversal operator. With OrientDB, MATCH should be the preferred choice for most users, since it tends to run faster than gremlin, and has other desirable properties. See the Execution model section for more details.
-   
+## FAQ
+
+**Q: Does the compiler support all GraphQL language features?**
+
+A: No. We prioritized and implemented a subset of all functionality supported by the
+   GraphQL language. We hope to add more functionality over time.
+
+**Q: Do you really use GraphQL, or do you just use GraphQL-like syntax?**
+
+A: We really use GraphQL. Any query that the compiler will accept is entirely valid GraphQL,
+   and we actually use the Python port of the GraphQL core library for parsing and type checking.
+   However, since the database queries produced by compiling GraphQL are subject to the limitations
+   of the database system they run on, our execution model is somewhat different compared to
+   the one described in the standard GraphQL specification. See the
+   [Execution model](#execution-model) section for more details.
+
+**Q: Does this project come with a GraphQL server implementation?**
+
+A: No -- there are many existing frameworks for running a web server. We simply built a tool
+   that takes GraphQL query strings (and their parameters) and returns a query string you can
+   use with your database. The compiler does not execute the query string against the database,
+   nor does it deserialize the results. Therefore, it is agnostic to the choice of
+   server framework and database client library used.
+
+**Q: What databases and query languages does the compiler support?**
+
+A: We currently support a single graph database, OrientDB version 2.2.28+, and two query languages
+   that OrientDB supports: the OrientDB dialect of `gremlin`, and OrientDB's own custom SQL-like
+   query language that we refer to as `MATCH`, after the name of its graph traversal operator.
+   With OrientDB, `MATCH` should be the preferred choice for most users, since it tends to run
+   faster than `gremlin`, and has other desirable properties. See the
+   [Execution model](#execution-model) section for more details.
+
    Support for relational databases including PostgreSQL, MySQL, SQLite,
    and Microsoft SQL Server is a work in progress. A subset of compiler features are available for
    these databases. See the [SQL](#sql) section for more details.
-* **GraphQL Language Features:**  We prioritized and implemented a subset of all functionality supported by the GraphQL language. We hope to add more functionality over time.
 
-## Querying OrientDB with GraphQL
-```python3
-from graphql_compiler import (
-    get_graphql_schema_from_orientdb_schema_data, graphql_to_match
-)
-from graphql_compiler.schema_generation.utils import ORIENTDB_SCHEMA_RECORDS_QUERY
-from graphql_compiler.tests.conftest import init_integration_graph_client
+**Q: Do you plan to support other databases / more GraphQL features in the future?**
 
-# The following code is meant to serve as a mock example and will not run
-# unless you are in the development enviroment outlined by CONTRIBUTING.md.
+A: We'd love to, and we could really use your help! Please consider contributing to this project
+   by opening issues, opening pull requests, or participating in discussions.
 
-# Step 1: Initialize dummy OrientDB database and get pyorient OrientDB client
-client = init_integration_graph_client()
+**Q: I think I found a bug, what do I do?**
 
-# Step 2: Generate GraphQL schema from queried OrientDB schema records
-schema_records = client.command(ORIENTDB_SCHEMA_RECORDS_QUERY)
-schema_data = [x.oRecordData for x in schema_records]
-schema, type_equivalence_hints = get_graphql_schema_from_orientdb_schema_data(schema_data)
+A: Please check if an issue has already been created for the bug, and open a new one if not.
+   Make sure to describe the bug in as much detail as possible, including any stack traces or
+   error messages you may have seen, which database you're using, and what query you compiled.
 
-# Step 3: Write GraphQL query to get the names of all animals with a particular net worth
-# Note that we prefix net_worth with '$' and surround it with quotes to indicate it's a parameter
-graphql_query = '''
-{
-    Animal {
-        name @output(out_name: "animal_name")
-        net_worth @filter(op_name: "=", value: ["$net_worth"])
-    }
-}
-'''
-parameters = {
-    'net_worth': '100',
-}
+**Q: I think I found a security vulnerability, what do I do?**
 
-# Step 4: Use autogenerated GraphQL schema to compile query into Match, an OrientDB query language
-compilation_result = graphql_to_match(schema, graphql_query, parameters, type_equivalence_hints)
+A: Please reach out to us at
+[graphql-compiler-maintainer@kensho.com](mailto:graphql-compiler-maintainer@kensho.com)
+so we can triage the issue and take appropriate action.
 
-# Step 5: Run query in OrientDB
-query = compilation_result.query
-results = [row.oRecordData for row in client.command(query)]
-assert results == [{'animal_name': 'Animal 1'}]
-```
 ## Definitions
-- **GraphQLSchema object**- To be able to compile GraphQL, the first thing you will need is a GraphQLSchema object describing 
-the underlying database. To build it you can use `get_graphql_schema_from_orientdb_schema_data` as 
-demonstrated in the code example below. 
-```python
-# Generate GraphQL schema from queried OrientDB schema records
-schema_records = client.command(ORIENTDB_SCHEMA_RECORDS_QUERY)
-schema_data = [x.oRecordData for x in schema_records]
-schema, type_equivalence_hints = get_graphql_schema_from_orientdb_schema_data(schema_data)
-```
+
 - **Vertex field**: A field corresponding to a vertex in the graph. In the below example, `Animal`
   and `out_Entity_Related` are vertex fields. The `Animal` field is the field at which querying
   starts, and is therefore the **root vertex field**. In any scope, fields with the prefix `out_`
   denote vertex fields connected by an outbound edge, whereas ones with the prefix `in_` denote
   vertex fields connected by an inbound edge.
-```graphql
+```
 {
     Animal {
         name @output(out_name: "name")
@@ -173,7 +165,7 @@ this directive prevents result sets that are unable to produce a value for that 
 being discarded, and allowed to continue processing the remainder of the query.
 
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @output(out_name: "name")
@@ -217,7 +209,7 @@ Its `out_name` argument specifies the name of the column in which the
 output value should be returned.
 
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @output(out_name: "animal_name")
@@ -246,7 +238,7 @@ on separate rows in the query result, the folded outputs are coalesced into list
 at the scope marked `@fold`.
 
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @output(out_name: "animal_name")
@@ -283,7 +275,7 @@ This query is *invalid* for two separate reasons:
 - It expands vertex fields after an `@output` directive (outputting `animal_name`)
 - The `in_Animal_ParentOf` scope, which is within a scope marked `@fold`,
   expands two vertex fields instead of at most one.
-```graphql
+```
 {
     Animal {
         out_Animal_ParentOf @fold {
@@ -301,7 +293,7 @@ This query is *invalid* for two separate reasons:
 }
 ```
 The following is a valid use of `@fold`:
-```graphql
+```
 {
     Animal {
         out_Animal_ParentOf @fold {
@@ -328,7 +320,7 @@ in the `@filter`'s `value` array. See [Passing parameters](#passing-parameters)
 for more details.
 
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @tag(tag_name: "parent_name")
@@ -379,7 +371,7 @@ all runtime parameters, and their values will be inserted into the final query b
 executed against the database.
 
 Consider the following query:
-```graphql
+```
 {
     Animal {
         name @output(out_name: "animal_name")
@@ -398,7 +390,7 @@ If the user marks a property field with a `@tag` directive and a suitable name,
 that value becomes available to use as a tagged parameter in all subsequent `@filter` directives.
 
 Consider the following query:
-```graphql
+```
 {
     Animal {
         name @tag(out_name: "parent_name")
@@ -463,7 +455,7 @@ at `depth = 0`, i.e. the current vertex -- see the below sections for a more tho
 #### Example Use
 Say the user wants to fetch the names of the children and grandchildren of each `Animal`.
 That could be accomplished by running the following two queries and concatenating their results:
-```graphql
+```
 {
     Animal {
         name @output(out_name: "ancestor")
@@ -473,7 +465,7 @@ That could be accomplished by running the following two queries and concatenatin
     }
 }
 ```
-```graphql
+```
 {
     Animal {
         name @output(out_name: "ancestor")
@@ -489,7 +481,7 @@ If the user then wanted to also add great-grandchildren to the `descendants` out
 require yet another query, and so on. Instead of concatenating the results of multiple queries,
 the user can simply use the `@recurse` directive. The following query returns the child and
 grandchild descendants:
-```graphql
+```
 {
     Animal {
         name @output(out_name: "ancestor")
@@ -521,7 +513,7 @@ Similarly, it cannot have descendants that are more than two steps removed
 
 Now, let's see what happens when we eliminate the outer `out_Animal_ParentOf` vertex field
 and simply have the `@recurse` applied on the `out_Animal_ParentOf` in the root vertex field scope:
-```graphql
+```
 {
     Animal {
         name @output(out_name: "ancestor")
@@ -580,7 +572,7 @@ Supported comparison operators:
 #### Example Use
 
 ##### Equal to (`=`):
-```graphql
+```
 {
     Species {
         name @filter(op_name: "=", value: ["$species_name"])
@@ -613,7 +605,7 @@ Allows you to filter on vertices which contain the exact string `$wanted_name_or
 `name` or `alias` fields.
 
 #### Example Use
-```graphql
+```
 {
     Animal @filter(op_name: "name_or_alias", value: ["$wanted_name_or_alias"]) {
         name @output(out_name: "name")
@@ -631,7 +623,7 @@ Substrings will not be matched.
 
 ### between
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @output(out_name: "name")
@@ -651,7 +643,7 @@ containing the animal's name in a column named `name`.
 
 ### in_collection
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @output(out_name: "animal_name")
@@ -668,7 +660,7 @@ containing the `Animal`'s name and color in columns named `animal_name` and `col
 
 ### has_substring
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @filter(op_name: "has_substring", value: ["$substring"])
@@ -685,7 +677,7 @@ in a column named `animal_name`.
 
 ### contains
 #### Example Use
-```graphql
+```
 {
     Animal {
         alias @filter(op_name: "contains", value: ["$wanted"])
@@ -702,7 +694,7 @@ in a column named `animal_name`.
 
 ### intersects
 #### Example Use
-```graphql
+```
 {
     Animal {
         alias @filter(op_name: "intersects", value: ["$wanted"])
@@ -719,7 +711,7 @@ Each row contains the matching `Animal`'s name in a column named `animal_name`.
 
 ### has_edge_degree
 #### Example Use
-```graphql
+```
 {
     Animal {
         name @output(out_name: "animal_name")
@@ -758,7 +750,7 @@ enclosing scope of the coercion -- they coerce the enclosing scope into a differ
 Type coercions are represented with GraphQL inline fragments.
 
 #### Example Use
-```graphql
+```
 {
     Species {
         name @output(out_name: "species_name")
@@ -775,7 +767,7 @@ with the query, the user must choose which of the types in the `Union__Food__Foo
 In this example, `... on Food` indicates that the `Food` type was chosen, and any vertices
 at that scope that are not of type `Food` are filtered out and discarded.
 
-```graphql
+```
 {
     Species {
         name @output(out_name: "species_name")
@@ -805,7 +797,7 @@ all directives that can be applied to any other property field.
 
 #### Example Use
 
-```graphql
+```
 {
     Entity {
         __typename @output(out_name: "entity_type")
@@ -865,7 +857,7 @@ insert_meta_fields_into_existing_schema(existing_schema)
 
 #### Example Use
 
-```graphql
+```
 {
     Animal {
         name @output(out_name: "name")
@@ -880,7 +872,7 @@ This query returns one row for each `Animal` vertex, containing its name, and th
 of its children. While the output type of the `child_names` selection is a list of strings,
 the output type of the `number_of_children` selection is an integer.
 
-```graphql
+```
 {
     Animal {
         name @output(out_name: "name")
@@ -916,7 +908,7 @@ matched the earlier filter.
 The `has_edge_degree` filter allows filtering based on the number of edges of a particular type.
 There are situations in which filtering with `has_edge_degree` and filtering using `=` on `_x_count`
 produce equivalent queries. Here is one such pair of queries:
-```graphql
+```
 {
     Species {
         name @output(out_name: "name")
@@ -927,7 +919,7 @@ produce equivalent queries. Here is one such pair of queries:
 }
 ```
 and
-```graphql
+```
 {
     Species {
         name @output(out_name: "name")
@@ -945,7 +937,7 @@ elements in the `@fold` is `$num_animals`").
 
 When we add additional filtering within the `Animal` vertices of the `in_Animal_OfSpecies` vertex
 field, this distinction becomes very important. Compare the following two queries:
-```graphql
+```
 {
     Species {
         name @output(out_name: "name")
@@ -958,7 +950,7 @@ field, this distinction becomes very important. Compare the following two querie
 }
 ```
 versus
-```graphql
+```
 {
     Species {
         name @output(out_name: "name")
@@ -1137,7 +1129,7 @@ the `t_name` value in each result, as they are both valid results.
 
 Users may apply the `@output_source` directive on the last scope of the query
 to alter this behavior:
-```graphql
+```
 {
     S {
         name @output(out_name: "s_name")
@@ -1151,7 +1143,7 @@ to alter this behavior:
 Rather than producing at most one result for each `S`, the query will now produce
 at most one result for each distinct value that can be found at `out_E`, where the directive
 is applied:
-```graphql
+```
 [
     {"s_name": "a", "t_name": "x"},
     {"s_name": "a", "t_name": "y"},
@@ -1160,7 +1152,7 @@ is applied:
 
 Conceptually, applying the `@output_source` directive makes it as if the query were written in
 the opposite order:
-```graphql
+```
 {
     T {
         name @output(out_name: "t_name")
@@ -1172,10 +1164,10 @@ the opposite order:
 ```
 
 ## SQL
-The following table outlines GraphQL compiler features, and their support (if any) by various 
+The following table outlines GraphQL compiler features, and their support (if any) by various
 relational database flavors:
 
-     
+
 | Feature/Dialect      | Required Edges | @filter                                                                                                                         | @output                                                          | @recurse | @fold | @optional | @output_source |
 |----------------------|----------------|---------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------|----------|-------|-----------|----------------|
 | PostgreSQL           | No             | Limited, [intersects](#intersects), [has_edge_degree](#has_edge_degree), and [name_or_alias](#name_or_alias) filter unsupported | Limited, [\__typename](#__typename) output metafield unsupported | No       | No    | No        | No             |
@@ -1190,7 +1182,7 @@ language, and then relying on SQLAlchemy's compilation of the dialect specific S
 the target database.
 
 For the SQL backend, GraphQL types are assumed to have a SQL table of the same name, and with the
-same properties. For example, a schema type 
+same properties. For example, a schema type
 ```
 type Animal {
     name: String
@@ -1219,7 +1211,7 @@ for a possible option to resolve such naming discrepancies.
 An end-to-end example including relevant GraphQL schema and SQLAlchemy engine preparation follows.
 
 This is intended to show the setup steps for the SQL backend of the GraphQL compiler, and
-does not represent best practices for configuring and running SQLAlchemy in a production system. 
+does not represent best practices for configuring and running SQLAlchemy in a production system.
 
 ```python
 from graphql import parse
@@ -1255,7 +1247,7 @@ animal_table = Table(
     'animal', # name of table matches type name from schema
     metadata,
     # Animal.name schema field has corresponding 'name' column in animal table
-    Column('name', String(length=12)), 
+    Column('name', String(length=12)),
 )
 
 # Step 3: Prepare a SQLAlchemy engine to query the target relational database.
@@ -1280,14 +1272,14 @@ parameters = {
 
 compilation_result = graphql_to_sql(schema, graphql_query, parameters, sql_metadata)
 
-# Step 6: Execute compiled query against a SQLAlchemy engine/connection. 
+# Step 6: Execute compiled query against a SQLAlchemy engine/connection.
 # See https://docs.sqlalchemy.org/en/latest/core/connections.html for more details.
 query = compilation_result.query
 query_results = [dict(result_proxy) for result_proxy in engine.execute(query)]
 ```
 
 ### Configuring the SQL Database to Match the GraphQL Schema
-For simplicity, the SQL backend expects an exact match between SQLAlchemy Tables and GraphQL types, 
+For simplicity, the SQL backend expects an exact match between SQLAlchemy Tables and GraphQL types,
 and between SQLAlchemy Columns and GraphQL fields. What if the table name or column name in the
 database doesn't conform to these rules? Eventually the plan is to make this aspect of the
 SQL backend more configurable. In the near-term, a possible way to address this is by using
@@ -1302,7 +1294,7 @@ type Animal {
 ```
 Then this could be exposed via a view like:
 ```sql
-CREATE VIEW animal AS 
+CREATE VIEW animal AS
     SELECT
         animal_name AS name
     FROM animal_table
@@ -1310,15 +1302,6 @@ CREATE VIEW animal AS
 At this point, the `animal` view can be used in the SQLAlchemy Table for the purposes of compiling.
 
 ## Miscellaneous
-
-### Pretty-Printing GraphQL Queries
-
-To pretty-print GraphQL queries, use the included pretty-printer:
-```
-python -m graphql_compiler.tool <input_file.graphql >output_file.graphql
-```
-It's modeled after Python's `json.tool`, reading from stdin and writing to stdout.
-
 
 ### Expanding [`@optional`](#optional) vertex fields
 Including an optional statement in GraphQL has no performance issues on its own,
@@ -1330,7 +1313,7 @@ Going forward, we will refer to two different kinds of `@optional` directives.
 - A *"simple"* optional is a vertex with an `@optional` directive that does not expand
 any vertex fields within it.
 For example:
-```graphql
+```
 {
     Animal {
         name @output(out_name: "name")
@@ -1360,7 +1343,7 @@ FROM (
 - A *"compound"* optional is a vertex with an `@optional` directive which does expand
 vertex fields within it.
 For example:
-```graphql
+```
 {
     Animal {
         name @output(out_name: "name")
@@ -1467,7 +1450,7 @@ type systems:
 - Gremlin does not have first-class support for inheritance at all.
 
 Assume the following GraphQL schema:
-```graphql
+```
 type Animal {
     name: String
 }
@@ -1496,7 +1479,7 @@ union's equivalent type.
 
 Setting `type_equivalence_hints = { Animal: AnimalCatDog }` during compilation
 would enable the use of a `@fold` on the `adjacent_animal` vertex field of `Foo`:
-```graphql
+```
 {
     Foo {
         adjacent_animal @fold {
@@ -1507,45 +1490,6 @@ would enable the use of a `@fold` on the `adjacent_animal` vertex field of `Foo`
     }
 }
 ```
-
-## FAQ
-
-**Q: Do you really use GraphQL, or do you just use GraphQL-like syntax?**
-
-A: We really use GraphQL. Any query that the compiler will accept is entirely valid GraphQL,
-   and we actually use the Python port of the GraphQL core library for parsing and type checking.
-   However, since the database queries produced by compiling GraphQL are subject to the limitations
-   of the database system they run on, our execution model is somewhat different compared to
-   the one described in the standard GraphQL specification. See the
-   [Execution model](#execution-model) section for more details.
-
-**Q: Does this project come with a GraphQL server implementation?**
-
-A: No -- there are many existing frameworks for running a web server. We simply built a tool
-   that takes GraphQL query strings (and their parameters) and returns a query string you can
-   use with your database. The compiler does not execute the query string against the database,
-   nor does it deserialize the results. Therefore, it is agnostic to the choice of
-   server framework and database client library used.
-
-**Q: Do you plan to support other databases / more GraphQL features in the future?**
-
-A: We'd love to, and we could really use your help! Please consider contributing to this project
-   by opening issues, opening pull requests, or participating in discussions.
-
-**Q: I think I found a bug, what do I do?**
-
-A: Please check if an issue has already been created for the bug, and open a new one if not.
-   Make sure to describe the bug in as much detail as possible, including any stack traces or
-   error messages you may have seen, which database you're using, and what query you compiled.
-
-**Q: I think I found a security vulnerability, what do I do?**
-
-A: Please reach out to us at
-[graphql-compiler-maintainer@kensho.com](mailto:graphql-compiler-maintainer@kensho.com)
-so we can triage the issue and take appropriate action.
-
-
-
 
 ## License
 
