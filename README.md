@@ -1,7 +1,12 @@
 # graphql-compiler
 
+
 [![Build Status](https://travis-ci.org/kensho-technologies/graphql-compiler.svg?branch=master)](https://travis-ci.org/kensho-technologies/graphql-compiler)
-[![Coverage Status](https://coveralls.io/repos/github/kensho-technologies/graphql-compiler/badge.svg?branch=master)](https://coveralls.io/github/kensho-technologies/graphql-compiler?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/jb-kensho/graphql-compiler/badge.svg)](https://coveralls.io/github/jb-kensho/graphql-compiler)
+
+[//]: # ([![Coverage Status](https://coveralls.io/repos/github/kensho-technologies/graphql-compiler/badge.svg?branch=master)](https://coveralls.io/github/kensho-technologies/graphql-compiler?branch=master))
+
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![PyPI Python](https://img.shields.io/pypi/pyversions/graphql-compiler.svg)](https://pypi.python.org/pypi/graphql-compiler)
 [![PyPI Version](https://img.shields.io/pypi/v/graphql-compiler.svg)](https://pypi.python.org/pypi/graphql-compiler)
@@ -90,7 +95,7 @@ A: We currently support a single graph database, OrientDB version 2.2.28+, and t
    With OrientDB, `MATCH` should be the preferred choice for most users, since it tends to run
    faster than `gremlin`, and has other desirable properties. See the
    [Execution model](#execution-model) section for more details.
-   
+
    Support for relational databases including PostgreSQL, MySQL, SQLite,
    and Microsoft SQL Server is a work in progress. A subset of compiler features are available for
    these databases. See the [SQL](#sql) section for more details.
@@ -1159,10 +1164,10 @@ the opposite order:
 ```
 
 ## SQL
-The following table outlines GraphQL compiler features, and their support (if any) by various 
+The following table outlines GraphQL compiler features, and their support (if any) by various
 relational database flavors:
 
-     
+
 | Feature/Dialect      | Required Edges | @filter                                                                                                                         | @output                                                          | @recurse | @fold | @optional | @output_source |
 |----------------------|----------------|---------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------|----------|-------|-----------|----------------|
 | PostgreSQL           | No             | Limited, [intersects](#intersects), [has_edge_degree](#has_edge_degree), and [name_or_alias](#name_or_alias) filter unsupported | Limited, [\__typename](#__typename) output metafield unsupported | No       | No    | No        | No             |
@@ -1177,7 +1182,7 @@ language, and then relying on SQLAlchemy's compilation of the dialect specific S
 the target database.
 
 For the SQL backend, GraphQL types are assumed to have a SQL table of the same name, and with the
-same properties. For example, a schema type 
+same properties. For example, a schema type
 ```
 type Animal {
     name: String
@@ -1206,7 +1211,7 @@ for a possible option to resolve such naming discrepancies.
 An end-to-end example including relevant GraphQL schema and SQLAlchemy engine preparation follows.
 
 This is intended to show the setup steps for the SQL backend of the GraphQL compiler, and
-does not represent best practices for configuring and running SQLAlchemy in a production system. 
+does not represent best practices for configuring and running SQLAlchemy in a production system.
 
 ```python
 from graphql import parse
@@ -1242,7 +1247,7 @@ animal_table = Table(
     'animal', # name of table matches type name from schema
     metadata,
     # Animal.name schema field has corresponding 'name' column in animal table
-    Column('name', String(length=12)), 
+    Column('name', String(length=12)),
 )
 
 # Step 3: Prepare a SQLAlchemy engine to query the target relational database.
@@ -1267,14 +1272,14 @@ parameters = {
 
 compilation_result = graphql_to_sql(schema, graphql_query, parameters, sql_metadata)
 
-# Step 6: Execute compiled query against a SQLAlchemy engine/connection. 
+# Step 6: Execute compiled query against a SQLAlchemy engine/connection.
 # See https://docs.sqlalchemy.org/en/latest/core/connections.html for more details.
 query = compilation_result.query
 query_results = [dict(result_proxy) for result_proxy in engine.execute(query)]
 ```
 
 ### Configuring the SQL Database to Match the GraphQL Schema
-For simplicity, the SQL backend expects an exact match between SQLAlchemy Tables and GraphQL types, 
+For simplicity, the SQL backend expects an exact match between SQLAlchemy Tables and GraphQL types,
 and between SQLAlchemy Columns and GraphQL fields. What if the table name or column name in the
 database doesn't conform to these rules? Eventually the plan is to make this aspect of the
 SQL backend more configurable. In the near-term, a possible way to address this is by using
@@ -1289,7 +1294,7 @@ type Animal {
 ```
 Then this could be exposed via a view like:
 ```sql
-CREATE VIEW animal AS 
+CREATE VIEW animal AS
     SELECT
         animal_name AS name
     FROM animal_table

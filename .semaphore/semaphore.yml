@@ -1,0 +1,55 @@
+version: v1.0
+name: "GraphQL Compiler Pipeline"
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+blocks:
+  - name: "Linting & Tests"
+    task:
+      secrets:
+        - name: coveralls_token
+      prologue:
+        commands:
+          - pip install --user coveralls
+          - export PATH=~/.local/bin:"$PATH"
+          - export PYTHONPATH=~/lib/python2.7/site-packages/
+          - "echo $PYTHONPATH | xargs -n 1 -d: | xargs -t --no-run-if-empty mkdir -p"
+          - pip install --user pipenv > /dev/null
+          - checkout
+          - pipenv install --dev
+          - export SEMAPHORE_BUILD_NUMBER=$(git rev-list --count HEAD)
+          - export SEMAPHORE_BUILD_NUMBER=$(git rev-parse --short HEAD)
+          - env
+      jobs:
+      - name: "Unit Tests"
+        commands:
+          - pipenv run bash -c "cd ~/graphql-compiler/.; python -m pytest --cov=graphql_compiler --ignore=./graphql_compiler/tests/integration_tests --ignore=./graphql_compiler/tests/snapshot_tests -vvv ./graphql_compiler/tests/. "
+          - coveralls --service=unit_tests
+
+      - name: "Integration & Snapshot Tests"
+        commands:
+          - curl -s -L https://github.com/docker/compose/releases/download/1.23.2/docker-compose-`uname -s`-`uname -m` -o ~/.local/bin/docker-compose
+          - chmod +x ~/.local/bin/docker-compose
+          - docker-compose up -d
+          - pipenv run bash -c "cd ~/graphql-compiler/.; python -m pytest --cov=graphql_compiler -k "integration_tests" -vvv ./graphql_compiler/tests/."
+          - coveralls --service=integration_tests
+          - pipenv run bash -c "cd ~/graphql-compiler/.; python -m pytest --cov=graphql_compiler -k "snapshot_tests" -vvv ./graphql_compiler/tests/."
+          - coveralls --service=snapshot_tests
+
+      - name: "Linting"
+        commands:
+          - pipenv run bash -c "cd ~/graphql-compiler/.; find . -name '*.py' | sort | xargs -t pylint --rcfile=$(find . -name .pylintrc) --jobs=$(nproc)"
+
+  - name: "Coveralls Finalize"
+    task:
+      secrets:
+        - name: coveralls_token
+      jobs:
+      - name: "Coveralls Finalize"
+        commands:
+          - checkout
+          - export SEMAPHORE_BUILD_NUMBER=$(git rev-list --count HEAD)
+          - export SEMAPHORE_BUILD_NUMBER=$(git rev-parse --short HEAD)
+          - curl -s -k "https://coveralls.io/webhook?repo_token=$COVERALLS_REPO_TOKEN" -d "payload[build_num]=$SEMAPHORE_BUILD_NUMBER&payload[status]=done"
+
